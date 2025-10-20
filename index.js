@@ -1,4 +1,6 @@
-// Cargar las herramientas que instalamos
+console.log("OpenAI Key Loaded:", !!process.env.OPENAI_API_KEY);
+console.log("Shopify Name Loaded:", !!process.env.SHOPIFY_SHOP_NAME);
+console.log("Shopify Key Loaded:", !!process.env.SHOPIFY_API_KEY);
 const express = require('express');
 const Shopify = require('shopify-api-node');
 const OpenAI = require('openai');
