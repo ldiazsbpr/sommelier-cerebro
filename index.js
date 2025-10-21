@@ -22,19 +22,22 @@ const shopify = new Shopify({
 // Definir la ruta principal de nuestra API
 app.post('/api/recommendation', async (req, res) => {
     try {
+        console.log("--- NUEVA CONSULTA RECIBIDA ---"); // Separador de inicio
         const userMessage = req.body.message;
         if (!userMessage) {
+            console.log("[ERROR]: No se recibió mensaje del usuario.");
+            console.log("--- CONSULTA FINALIZADA CON ERROR ---");
             return res.status(400).json({ error: 'No se ha proporcionado ningún mensaje.' });
         }
         
+        console.log(`[PREGUNTA DEL USUARIO]: ${userMessage}`);
+        
         const products = await shopify.product.list({ status: 'active', limit: 100 });
         
-        // Modificado para incluir la URL de la imagen (p.image?.src)
         const formattedProducts = products.map(p => 
             `Nombre: ${p.title}, Handle: ${p.handle}, Imagen: ${p.image?.src}, Precio: ${p.variants[0].price}, Descripción: ${p.body_html.replace(/<[^>]*>/g, '').substring(0, 150)}..., Tags: ${p.tags}`
         ).join('\n- ');
 
-        // Modificado para pedir la "imagen" en la respuesta JSON
         const systemPrompt = `
             Eres un sommelier virtual experto, amigable y apasionado llamado "Xavier".
             Tu tarea es analizar la petición de un cliente y recomendar entre 2 y 3 de los MEJORES vinos de la lista de productos disponibles.
@@ -83,12 +86,14 @@ app.post('/api/recommendation', async (req, res) => {
           };
         });
 
-        console.log("Respuesta final enviada al frontend:", recomendacionesConUrl);
+        console.log("[RESPUESTA DE XAVIER]:", JSON.stringify(recomendacionesConUrl, null, 2));
+        console.log("--- CONSULTA FINALIZADA CON ÉXITO ---");
 
         res.json({ recomendaciones: recomendacionesConUrl });
 
     } catch (error) {
-        console.error("Ha ocurrido un error:", error);
+        console.error("--- ERROR EN LA CONSULTA ---", error); // Error más detallado
+        console.log("--- CONSULTA FINALIZADA CON ERROR ---");
         res.status(500).json({ error: 'Hubo un problema al procesar tu solicitud.' });
     }
 });
