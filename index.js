@@ -27,19 +27,20 @@ app.post('/api/recommendation', async (req, res) => {
             return res.status(400).json({ error: 'No se ha proporcionado ningún mensaje.' });
         }
         
-        // ¡Línea crucial! Obtenemos los productos de Shopify.
         const products = await shopify.product.list({ status: 'active', limit: 100 });
         
+        // Modificado para incluir la URL de la imagen (p.image?.src)
         const formattedProducts = products.map(p => 
-            `Nombre: ${p.title}, Handle: ${p.handle}, Precio: ${p.variants[0].price}, Descripción: ${p.body_html.replace(/<[^>]*>/g, '').substring(0, 150)}..., Tags: ${p.tags}`
+            `Nombre: ${p.title}, Handle: ${p.handle}, Imagen: ${p.image?.src}, Precio: ${p.variants[0].price}, Descripción: ${p.body_html.replace(/<[^>]*>/g, '').substring(0, 150)}..., Tags: ${p.tags}`
         ).join('\n- ');
 
+        // Modificado para pedir la "imagen" en la respuesta JSON
         const systemPrompt = `
             Eres un sommelier virtual experto, amigable y apasionado llamado "Xavier".
             Tu tarea es analizar la petición de un cliente y recomendar entre 2 y 3 de los MEJORES vinos de la lista de productos disponibles.
             Tu respuesta DEBE ser únicamente un objeto JSON válido, sin texto adicional antes o después. NUNCA respondas con texto plano.
             El objeto JSON debe tener una clave "recomendaciones" que contenga un array de objetos.
-            Cada objeto debe tener tres claves: "nombre" (el nombre del vino), "handle" (el handle del producto correspondiente de la lista), y "explicacion" (un párrafo corto, cálido y profesional explicando por qué es una buena elección).
+            Cada objeto debe tener cuatro claves: "nombre", "handle", "imagen" (la URL de la imagen del producto), y "explicacion".
             
             Ejemplo de formato de respuesta:
             {
@@ -47,12 +48,8 @@ app.post('/api/recommendation', async (req, res) => {
                 {
                   "nombre": "Cloudy Bay Sauvignon Blanc 2022",
                   "handle": "cloudy-bay-sauvignon-blanc-2022",
-                  "explicacion": "Este vino es perfecto para tu ensalada por sus notas cítricas y frescas que complementarán los mariscos..."
-                },
-                {
-                  "nombre": "Whispering Angel Rosé 2022",
-                  "handle": "whispering-angel-rose-2022",
-                  "explicacion": "Una alternativa refrescante sería este rosado, que con sus notas a fresa y melocotón ofrece un contrapunto delicioso..."
+                  "imagen": "https://cdn.shopify.com/..../imagen.jpg",
+                  "explicacion": "Este vino es perfecto para tu ensalada..."
                 }
               ]
             }
@@ -69,7 +66,7 @@ app.post('/api/recommendation', async (req, res) => {
         `;
         
         const completion = await openai.chat.completions.create({
-            model: "gpt-3.5-turbo-1106", // Usamos un modelo que soporta JSON mode
+            model: "gpt-3.5-turbo-1106",
             response_format: { type: "json_object" },
             messages: [
                 { role: "system", content: systemPrompt },
@@ -77,20 +74,17 @@ app.post('/api/recommendation', async (req, res) => {
             ],
         });
 
-        // Parseamos la respuesta JSON de la IA
         const aiJsonResponse = JSON.parse(completion.choices[0].message.content);
 
-        // Creamos los URLs completos para cada recomendación
         const recomendacionesConUrl = aiJsonResponse.recomendaciones.map(rec => {
           return {
-            ...rec, // Mantenemos nombre, handle, y explicacion
-            url: `https://be716a-ba.myshopify.com/products/${rec.handle}` // Construimos la URL
+            ...rec,
+            url: `https://be716a-ba.myshopify.com/products/${rec.handle}`
           };
         });
 
         console.log("Respuesta final enviada al frontend:", recomendacionesConUrl);
 
-        // Enviamos el array de recomendaciones con URLs al frontend
         res.json({ recomendaciones: recomendacionesConUrl });
 
     } catch (error) {
