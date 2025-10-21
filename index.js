@@ -22,18 +22,16 @@ const shopify = new Shopify({
 // Definir la ruta principal de nuestra API
 app.post('/api/recommendation', async (req, res) => {
     try {
-        console.log("Recibida una nueva petición...");
         const userMessage = req.body.message;
         if (!userMessage) {
             return res.status(400).json({ error: 'No se ha proporcionado ningún mensaje.' });
         }
-        console.log("Mensaje del usuario:", userMessage);
-        console.log("Obteniendo productos de Shopify...");
+        
         const products = await shopify.product.list({ status: 'active', limit: 100 });
         const formattedProducts = products.map(p => 
             `Nombre: ${p.title}, Precio: ${p.variants[0].price}, Descripción: ${p.body_html.replace(/<[^>]*>/g, '').substring(0, 150)}..., Tags: ${p.tags}`
         ).join('\n- ');
-        console.log("Productos formateados para la IA.");
+
         const systemPrompt = `
             Eres un sommelier virtual experto, amigable y apasionado llamado "VinoBot".
             Tu única tarea es analizar la petición de un cliente y recomendar el MEJOR vino de la lista de productos disponibles que te proporciono.
@@ -52,7 +50,7 @@ app.post('/api/recommendation', async (req, res) => {
             **Petición del Cliente:**
             "${userMessage}"
         `;
-        console.log("Enviando petición a OpenAI...");
+        
         const completion = await openai.chat.completions.create({
             model: "gpt-3.5-turbo",
             messages: [
@@ -60,8 +58,8 @@ app.post('/api/recommendation', async (req, res) => {
                 { role: "user", content: userPrompt }
             ],
         });
+
         const aiResponse = completion.choices[0].message.content;
-        console.log("Respuesta recibida de OpenAI:", aiResponse);
         res.json({ reply: aiResponse });
     } catch (error) {
         console.error("Ha ocurrido un error:", error);
