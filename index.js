@@ -27,20 +27,37 @@ app.post('/api/recommendation', async (req, res) => {
             return res.status(400).json({ error: 'No se ha proporcionado ningún mensaje.' });
         }
         
+        // ¡Línea crucial! Obtenemos los productos de Shopify.
         const products = await shopify.product.list({ status: 'active', limit: 100 });
+        
         const formattedProducts = products.map(p => 
-            `Nombre: ${p.title}, Precio: ${p.variants[0].price}, Descripción: ${p.body_html.replace(/<[^>]*>/g, '').substring(0, 150)}..., Tags: ${p.tags}`
+            `Nombre: ${p.title}, Handle: ${p.handle}, Precio: ${p.variants[0].price}, Descripción: ${p.body_html.replace(/<[^>]*>/g, '').substring(0, 150)}..., Tags: ${p.tags}`
         ).join('\n- ');
 
         const systemPrompt = `
-            Eres un sommelier virtual experto, amigable y apasionado llamado "VinoBot".
-            Tu única tarea es analizar la petición de un cliente y recomendar el MEJOR vino de la lista de productos disponibles que te proporciono.
-            - NUNCA inventes un vino ni recomiendes algo que no esté en la lista.
-            - Tu respuesta debe ser concisa, en un solo párrafo, y en un tono cálido y profesional.
-            - Explica brevemente por qué tu recomendación es una buena elección para el cliente.
-            - Al final de tu recomendación, menciona claramente el nombre del vino y su precio.
-            - Responde siempre en español.
+            Eres un sommelier virtual experto, amigable y apasionado llamado "Xavier".
+            Tu tarea es analizar la petición de un cliente y recomendar entre 2 y 3 de los MEJORES vinos de la lista de productos disponibles.
+            Tu respuesta DEBE ser únicamente un objeto JSON válido, sin texto adicional antes o después. NUNCA respondas con texto plano.
+            El objeto JSON debe tener una clave "recomendaciones" que contenga un array de objetos.
+            Cada objeto debe tener tres claves: "nombre" (el nombre del vino), "handle" (el handle del producto correspondiente de la lista), y "explicacion" (un párrafo corto, cálido y profesional explicando por qué es una buena elección).
+            
+            Ejemplo de formato de respuesta:
+            {
+              "recomendaciones": [
+                {
+                  "nombre": "Cloudy Bay Sauvignon Blanc 2022",
+                  "handle": "cloudy-bay-sauvignon-blanc-2022",
+                  "explicacion": "Este vino es perfecto para tu ensalada por sus notas cítricas y frescas que complementarán los mariscos..."
+                },
+                {
+                  "nombre": "Whispering Angel Rosé 2022",
+                  "handle": "whispering-angel-rose-2022",
+                  "explicacion": "Una alternativa refrescante sería este rosado, que con sus notas a fresa y melocotón ofrece un contrapunto delicioso..."
+                }
+              ]
+            }
         `;
+        
         const userPrompt = `
             **Lista de Vinos Disponibles en nuestra tienda:**
             - ${formattedProducts}
@@ -52,15 +69,30 @@ app.post('/api/recommendation', async (req, res) => {
         `;
         
         const completion = await openai.chat.completions.create({
-            model: "gpt-3.5-turbo",
+            model: "gpt-3.5-turbo-1106", // Usamos un modelo que soporta JSON mode
+            response_format: { type: "json_object" },
             messages: [
                 { role: "system", content: systemPrompt },
                 { role: "user", content: userPrompt }
             ],
         });
 
-        const aiResponse = completion.choices[0].message.content;
-        res.json({ reply: aiResponse });
+        // Parseamos la respuesta JSON de la IA
+        const aiJsonResponse = JSON.parse(completion.choices[0].message.content);
+
+        // Creamos los URLs completos para cada recomendación
+        const recomendacionesConUrl = aiJsonResponse.recomendaciones.map(rec => {
+          return {
+            ...rec, // Mantenemos nombre, handle, y explicacion
+            url: `https://be716a-ba.myshopify.com/products/${rec.handle}` // Construimos la URL
+          };
+        });
+
+        console.log("Respuesta final enviada al frontend:", recomendacionesConUrl);
+
+        // Enviamos el array de recomendaciones con URLs al frontend
+        res.json({ recomendaciones: recomendacionesConUrl });
+
     } catch (error) {
         console.error("Ha ocurrido un error:", error);
         res.status(500).json({ error: 'Hubo un problema al procesar tu solicitud.' });
